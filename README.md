@@ -81,6 +81,16 @@ uv run python src/get_xtinyunet_config.py \
 
 This returns the XTinyU-Net config.
 
+Run the input-output sensitivity scoring of the generated configs.
+
+```bash
+uv run python src/score_net.py \
+  --train_dataset_id DATASET_ID \
+  --plans nnUNetPlans \
+  --trainer nnUNetTrainer \
+  --cfg XTINY_CONFIG
+```
+
 ## 5. Train With nnU-Net
 
 Train normally with nnU-Net, but use the selected XTinyU-Net config:
