@@ -23,7 +23,7 @@ def get_dataset_name(dataset_id, nnunet_raw):
 
 def get_scores_path(dataset_id, num_samples, seed, nnunet_raw, nas_dir):
     dataset_name = get_dataset_name(dataset_id, nnunet_raw)
-    return nas_dir / f"{dataset_name}_metrics_n{num_samples}_seed{seed}.csv"
+    return nas_dir / f"{dataset_name}_metrics_K{num_samples}_seed{seed}.csv"
 
 
 def config_cap(config_name):
