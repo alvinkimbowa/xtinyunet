@@ -69,7 +69,7 @@ $nnUNet_preprocessed/DatasetXXX_MyDataset/
 ## 4. Get XTinyU-Net Config
 
 ```bash
-uv run python src/get_xtinyunet_config.py --plans /path/to/nnUNetPlans.json
+uv run python src/generate_candidate_configs.py --plans /path/to/nnUNetPlans.json
 ```
 
 Example:
@@ -79,22 +79,24 @@ uv run python src/generate_candidate_configs.py \
   --plans "$nnUNet_preprocessed/Dataset300_MyDataset/nnUNetPlans.json"
 ```
 
-This generates candidate configurations to be scored.
-
 Run the input-output sensitivity scoring of the generated configs.
 
 ```bash
+BATCH_SIZE="all"
 uv run python src/score_net.py \
   --train_dataset_id DATASET_ID \
   --plans nnUNetPlans \
   --trainer nnUNetTrainer \
-  --cfg XTINY_CONFIG
+  --batch_size "${BATCH_SIZE}"
 ```
 
-Determine the XTinyU-Net config.
+Select the XTinyU-Net config:
+
+```bash
+uv run python src/get_xtiny_config.py --scores /path/to/DatasetXXX_metrics_b${BATCH_SIZE}.csv
 ```
 
-```
+This returns the XTinyU-Net config.
 
 ## 5. Train With nnU-Net
 
