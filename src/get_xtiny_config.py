@@ -6,6 +6,8 @@ import os
 import re
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+
 
 def get_dataset_name(dataset_id, nnunet_raw):
     dataset_id = str(dataset_id).zfill(3)
@@ -44,8 +46,9 @@ def normalize(values):
     ]
 
 
-def select_xtiny_config(rows, metric):
+def get_metric_curve(rows, metric):
     scores = {}
+    params = {}
     for row in rows:
         cfg = row["cfg"]
         cap = config_cap(cfg)
@@ -54,9 +57,15 @@ def select_xtiny_config(rows, metric):
         value = float(row[metric])
         if math.isfinite(value):
             scores[cfg] = value
+            params[cfg] = float(row["params"])
 
     configs = sorted(scores, key=lambda c: config_cap(c), reverse=True)
     values = normalize([scores[cfg] for cfg in configs])
+    param_values = [params[cfg] for cfg in configs]
+    return configs, param_values, values
+
+
+def select_xtiny_config(configs, values):
     if len(values) < 4:
         raise RuntimeError("Need at least four finite XTiny configs to select a collapse boundary")
 
@@ -72,6 +81,31 @@ def select_xtiny_config(rows, metric):
             best_k = k
 
     return configs[best_k]
+
+
+def plot_difference_curve(configs, params, values, selected_config, out_path):
+    diffs = [math.nan] + [abs(values[i] - values[i - 1]) for i in range(1, len(values))]
+    selected_idx = configs.index(selected_config)
+
+    fig, ax = plt.subplots(figsize=(5, 3.5))
+    ax.plot(params, diffs, marker="o", linewidth=1.2, color="black")
+    ax.scatter(
+        params[selected_idx],
+        diffs[selected_idx],
+        marker="*",
+        s=130,
+        color="red",
+        zorder=5,
+        label=selected_config,
+    )
+    ax.set_xscale("log")
+    ax.set_xlabel("# Parameters")
+    ax.set_ylabel("Difference in normalized sensitivity")
+    ax.legend(frameon=True)
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
 
 
 def main():
@@ -91,7 +125,16 @@ def main():
     with scores_path.open("r", newline="") as f:
         rows = list(csv.DictReader(f))
 
-    print(select_xtiny_config(rows, args.metric))
+    configs, params, values = get_metric_curve(rows, args.metric)
+    selected_config = select_xtiny_config(configs, values)
+    plot_difference_curve(
+        configs,
+        params,
+        values,
+        selected_config,
+        scores_path.with_suffix(".png"),
+    )
+    print(selected_config)
 
 
 if __name__ == "__main__":
