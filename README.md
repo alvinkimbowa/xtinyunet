@@ -84,12 +84,12 @@ uv run python src/generate_candidate_configs.py \
 4.2 Run the input-output sensitivity scoring of the generated configs.
 
 ```bash
-BATCH_SIZE="all"
+NUM_SAMPLES="all"
 uv run python src/score_net.py \
   --train_dataset_id DATASET_ID \
   --plans nnUNetPlans \
   --trainer nnUNetTrainer \
-  --batch_size "${BATCH_SIZE}"
+  --num_samples "${NUM_SAMPLES}"
 ```
 
 4.3 Estimate the collapse boundary and select the XTinyU-Net config:
@@ -97,7 +97,7 @@ uv run python src/score_net.py \
 ```bash
 uv run python src/get_xtiny_config.py \
   --dataset_id DATASET_ID \
-  --batch_size "${BATCH_SIZE}"
+  --num_samples "${NUM_SAMPLES}"
 ```
 
 This returns the XTinyU-Net config.

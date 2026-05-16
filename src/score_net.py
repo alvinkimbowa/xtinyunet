@@ -71,7 +71,7 @@ def build_arg_parser():
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--split", type=str, default="Tr", choices=["Tr", "Ts"])
     parser.add_argument("--split_type", type=str, default="train", choices=["train", "val", "test"])
-    parser.add_argument("--batch_size", type=str, default="all", help="batch size for scoring")
+    parser.add_argument("--num_samples", type=str, default="all", help="number of samples to score")
     parser.add_argument("--seed", type=int, default=369)
     parser.add_argument("--out_dir", type=str, default="results/nas_metrics")
     parser.add_argument("--save_batch_jacobian", action="store_true",
@@ -110,14 +110,14 @@ def set_seed(seed):
     torch.manual_seed(seed)
 
 
-def get_batch_size(batch_size):
+def get_num_samples(num_samples):
     try:
-        batch_size = int(batch_size)
+        num_samples = int(num_samples)
     except (TypeError, ValueError):
         return None, "all"
-    if batch_size < 0:
+    if num_samples < 0:
         return None, "all"
-    return batch_size, str(batch_size)
+    return num_samples, str(num_samples)
 
 
 def get_dataset_name(dataset_id):
@@ -275,7 +275,7 @@ def center_crop_or_pad(x: torch.Tensor, patch_size: tuple[int, int], pad_value: 
 
 
 def score_config(args, cfg, device, metric_set):
-    num_cases, batch_size = get_batch_size(args.batch_size)
+    num_cases, num_samples = get_num_samples(args.num_samples)
     model, dataset_name, loss_fn, data_loader, num_train, mini_batch_size, patch_size = load_nnunet_model(
         args.train_dataset_id,
         args.plans,
@@ -287,7 +287,7 @@ def score_config(args, cfg, device, metric_set):
     )
     
     print("num_train", num_train)
-    print("batch_size", batch_size)
+    print("num_samples", num_samples)
     print("mini_batch_size", mini_batch_size)
     print("patch_size", patch_size)
     print("cfg", cfg)
@@ -405,7 +405,7 @@ def score_config(args, cfg, device, metric_set):
     # Aggregate other NAS metrics    
     if args.save_swap_codes:
         merged_swap_codes = {k: np.concatenate(v, axis=0) for k, v in swap_packed_codes.items()}
-        swap_codes_path = join(args.out_dir, f"{dataset_name}_{cfg}_b{batch_size}_swap_codes.npz")
+        swap_codes_path = join(args.out_dir, f"{dataset_name}_{cfg}_n{num_samples}_swap_codes.npz")
         np.savez(swap_codes_path, **{f"{k}__packed": merged_swap_codes[k] for k in merged_swap_codes},
                  **{f"{k}__nbits": np.array(swap_packed_nbits[k]) for k in swap_packed_nbits})
         swap_avg = swap_from_packed(merged_swap_codes, swap_packed_nbits)
@@ -413,7 +413,7 @@ def score_config(args, cfg, device, metric_set):
         swap_avg = float(np.nanmean(swap_scores)) if swap_scores else float("nan")
     if args.save_naswot_codes:
         merged_codes = {k: np.concatenate(v, axis=0) for k, v in packed_codes.items()}
-        codes_path = join(args.out_dir, f"{dataset_name}_{cfg}_b{batch_size}_naswot_codes.npz")
+        codes_path = join(args.out_dir, f"{dataset_name}_{cfg}_n{num_samples}_naswot_codes.npz")
         np.savez(codes_path, **{f"{k}__packed": merged_codes[k] for k in merged_codes},
                  **{f"{k}__nbits": np.array(packed_nbits[k]) for k in packed_nbits})
         naswot_avg = naswot_from_packed(merged_codes, packed_nbits)
@@ -421,7 +421,7 @@ def score_config(args, cfg, device, metric_set):
         naswot_avg = float(np.nanmean(naswot_scores)) if naswot_scores else float("nan")
     if args.save_ncd_naswot_codes:
         merged_ncd_nas = {k: np.concatenate(v, axis=0) for k, v in ncd_naswot_packed_codes.items()}
-        ncd_nas_path = join(args.out_dir, f"{dataset_name}_{cfg}_b{batch_size}_ncd_naswot_codes.npz")
+        ncd_nas_path = join(args.out_dir, f"{dataset_name}_{cfg}_n{num_samples}_ncd_naswot_codes.npz")
         np.savez(ncd_nas_path, **{f"{k}__packed": merged_ncd_nas[k] for k in merged_ncd_nas},
                  **{f"{k}__nbits": np.array(ncd_naswot_packed_nbits[k]) for k in ncd_naswot_packed_nbits})
         ncd_naswot_avg = naswot_from_packed(merged_ncd_nas, ncd_naswot_packed_nbits)
@@ -429,7 +429,7 @@ def score_config(args, cfg, device, metric_set):
         ncd_naswot_avg = float(np.nanmean(ncd_naswot_scores)) if ncd_naswot_scores else float("nan")
     if args.save_ncd_swap_codes:
         merged_ncd_swap = {k: np.concatenate(v, axis=0) for k, v in ncd_swap_packed_codes.items()}
-        ncd_swap_path = join(args.out_dir, f"{dataset_name}_{cfg}_b{batch_size}_ncd_swap_codes.npz")
+        ncd_swap_path = join(args.out_dir, f"{dataset_name}_{cfg}_n{num_samples}_ncd_swap_codes.npz")
         np.savez(ncd_swap_path, **{f"{k}__packed": merged_ncd_swap[k] for k in merged_ncd_swap},
                  **{f"{k}__nbits": np.array(ncd_swap_packed_nbits[k]) for k in ncd_swap_packed_nbits})
         ncd_swap_avg = swap_from_packed(merged_ncd_swap, ncd_swap_packed_nbits)
@@ -448,7 +448,7 @@ def score_config(args, cfg, device, metric_set):
     )
     print("\n")
     print(line)
-    out_file = join(args.out_dir, f"{dataset_name}_metrics_b{batch_size}_seed{args.seed}.csv")
+    out_file = join(args.out_dir, f"{dataset_name}_metrics_n{num_samples}_seed{args.seed}.csv")
     print("out_file", out_file)
     need_header = not os.path.exists(out_file) or os.path.getsize(out_file) == 0
     with open(out_file, "a", encoding="utf-8") as f:
@@ -460,7 +460,7 @@ def score_config(args, cfg, device, metric_set):
         )
     
     if args.save_batch_jacobian and batch_rows:
-        batch_path = join(args.out_dir, f"{dataset_name}_batch_jacobian_b{batch_size}.csv")
+        batch_path = join(args.out_dir, f"{dataset_name}_batch_jacobian_n{num_samples}.csv")
         need_header = not os.path.exists(batch_path) or os.path.getsize(batch_path) == 0
         with open(batch_path, "a", encoding="utf-8") as f:
             if need_header:

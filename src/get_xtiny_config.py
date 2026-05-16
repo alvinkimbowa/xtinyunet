@@ -21,9 +21,9 @@ def get_dataset_name(dataset_id, nnunet_raw):
     return matches[0]
 
 
-def get_scores_path(dataset_id, batch_size, seed, nnunet_raw, nas_dir):
+def get_scores_path(dataset_id, num_samples, seed, nnunet_raw, nas_dir):
     dataset_name = get_dataset_name(dataset_id, nnunet_raw)
-    return nas_dir / f"{dataset_name}_metrics_b{batch_size}_seed{seed}.csv"
+    return nas_dir / f"{dataset_name}_metrics_n{num_samples}_seed{seed}.csv"
 
 
 def config_cap(config_name):
@@ -157,14 +157,14 @@ def plot_difference_curve(configs, params, values, selected_config, out_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_id", type=int, required=True)
-    parser.add_argument("--batch_size", required=True)
+    parser.add_argument("--num_samples", required=True)
     parser.add_argument("--seed", type=int, default=369)
     parser.add_argument("--metric", default="jacobian")
     args = parser.parse_args()
 
     scores_path = get_scores_path(
         args.dataset_id,
-        args.batch_size,
+        args.num_samples,
         args.seed,
         Path(os.environ["nnUNet_raw"]),
         Path("results/nas_metrics"),
