@@ -48,7 +48,7 @@ def build_arg_parser():
     parser.add_argument("--split", type=str, default="Tr", choices=["Tr", "Ts"])
     parser.add_argument("--split_type", type=str, default="train", choices=["train", "val", "test"])
     parser.add_argument("--batch_size", type=str, default="all", help="batch size for scoring")
-    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=369)
     parser.add_argument("--out_dir", type=str, default="results/nas_metrics")
     parser.add_argument("--save_batch_jacobian", action="store_true",
                         help="save per-batch jacobian with image ids")
