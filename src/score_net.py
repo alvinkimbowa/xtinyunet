@@ -480,7 +480,7 @@ def score_config(args, cfg, device, metric_set):
     )
     print("\n")
     print(line)
-    out_file = join(args.out_dir, f"{dataset_name}_metrics_b{batch_size}.csv")
+    out_file = join(args.out_dir, f"{dataset_name}_metrics_b{batch_size}_seed{args.seed}.csv")
     if args.use_pretrained:
         out_file = out_file.replace("metrics_", "metrics_pretrained_")
     print("out_file", out_file)
