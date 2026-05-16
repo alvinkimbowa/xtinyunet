@@ -75,11 +75,11 @@ uv run python src/get_xtinyunet_config.py --plans /path/to/nnUNetPlans.json
 Example:
 
 ```bash
-uv run python src/get_xtinyunet_config.py \
+uv run python src/generate_candidate_configs.py \
   --plans "$nnUNet_preprocessed/Dataset300_MyDataset/nnUNetPlans.json"
 ```
 
-This returns the XTinyU-Net config.
+This generates candidate configurations to be scored.
 
 Run the input-output sensitivity scoring of the generated configs.
 
@@ -89,6 +89,11 @@ uv run python src/score_net.py \
   --plans nnUNetPlans \
   --trainer nnUNetTrainer \
   --cfg XTINY_CONFIG
+```
+
+Determine the XTinyU-Net config.
+```
+
 ```
 
 ## 5. Train With nnU-Net
