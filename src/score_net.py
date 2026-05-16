@@ -1,9 +1,11 @@
 import argparse
+from contextlib import contextmanager
+import importlib
 import json
 import os
 import random
-import shutil
 import re
+import tempfile
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -32,14 +34,36 @@ from at_init_metrics import (
 )
 
 nnUNet_raw = os.environ['nnUNet_raw']
-nnUNet_results = os.environ['nnUNet_results']
 nnUNet_preprocessed = os.environ['nnUNet_preprocessed']
+
+
+@contextmanager
+def temporary_trainer_results_dir():
+    trainer_module = importlib.import_module("nnunetv2.training.nnUNetTrainer.nnUNetTrainer")
+    old_results = trainer_module.nnUNet_results
+    with tempfile.TemporaryDirectory(prefix="xtiny_score_nnunet_results_") as tmp_dir:
+        trainer_module.nnUNet_results = tmp_dir
+        try:
+            yield
+        finally:
+            trainer_module.nnUNet_results = old_results
+
+
+def make_predictor(device):
+    return nnUNetPredictor(
+        tile_step_size=0.5,
+        use_gaussian=True,
+        use_mirroring=True,
+        perform_everything_on_device=True,
+        device=device,
+        verbose=False,
+        verbose_preprocessing=False,
+        allow_tqdm=True
+    )
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(description="Compute NASWOT score for an nnUNet model")
     parser.add_argument("--train_dataset_id", type=int, required=True)
-    parser.add_argument("--chk", type=str, default="checkpoint_final.pth")
-    parser.add_argument("--use_pretrained", action="store_true", help="use pretrained model")
     parser.add_argument("--plans", type=str, required=True)
     parser.add_argument("--trainer", type=str, required=True)
     parser.add_argument("--cfg", type=str, default=None)
@@ -153,54 +177,29 @@ def get_target(meta, dataset_name, dataset_json, slice_idx=None):
     target = torch.from_numpy(arr).float().unsqueeze(0).unsqueeze(0)
     return target
 
-def load_nnunet_model(train_dataset_id, plans, trainer, cfg, fold, device, pretrained=False, num_cases=None, chk="checkpoint_final.pth"):
+def load_nnunet_model(train_dataset_id, plans, trainer, cfg, fold, device, num_cases=None):
     fold = fold if fold == "all" else int(fold)
     dataset_name = get_dataset_name(train_dataset_id)
     dataset_json = get_dataset_json(train_dataset_id)
-    
-    nnunet_trainer = get_trainer_from_args(dataset_name, cfg, fold, trainer, plans, device=device)
-    nnunet_trainer.enable_deep_supervision = False
-    nnunet_trainer.initialize()
-    model = nnunet_trainer.network.to(device)
-    with open("model.txt", "w") as f:
-        f.write(str(model))
-    loss_fn = nnunet_trainer.loss
     os.environ["nnUNet_n_proc_DA"] = "0"    # Use a single process for data augmentation to avoid wierd errors
-    # data_loader, val_loader = nnunet_trainer.get_dataloaders()
     num_train = get_dataset_json(train_dataset_id)["numTraining"]
-    mini_batch_size = nnunet_trainer.configuration_manager.batch_size
-    patch_size = nnunet_trainer.configuration_manager.patch_size
-    model_dir = join(
-        nnUNet_results,
-        dataset_name,
-        f"{trainer}__{plans}__{cfg}",
-    )
-    predictor = nnUNetPredictor(
-        tile_step_size=0.5,
-        use_gaussian=True,
-        use_mirroring=True,
-        perform_everything_on_device=True,
-        device=device,
-        verbose=False,
-        verbose_preprocessing=False,
-        allow_tqdm=True
-    )
-        
-    if not os.path.exists(join(model_dir, f"fold_{fold}", "checkpoint_final.pth")):
-        nnunet_trainer.save_checkpoint(join(model_dir, f"fold_{fold}", "checkpoint_final.pth"))
-    if not os.path.exists(join(model_dir, "dataset.json")):
-        shutil.copy(join(nnUNet_preprocessed, dataset_name, "dataset.json"), join(model_dir, "dataset.json"))
-    if not os.path.exists(join(model_dir, "plans.json")):
-        shutil.copy(join(nnUNet_preprocessed, dataset_name, f"{plans}.json"), join(model_dir, "plans.json"))
-
-    predictor.initialize_from_trained_model_folder(
-        model_dir,
-        use_folds=(fold,),
-        checkpoint_name=chk,
-    )
-
-    if pretrained:
-        model = predictor.network.to(device)
+    predictor = make_predictor(device)
+    with temporary_trainer_results_dir():
+        nnunet_trainer = get_trainer_from_args(dataset_name, cfg, fold, trainer, plans, device=device)
+        nnunet_trainer.enable_deep_supervision = False
+        nnunet_trainer.initialize()
+        model = nnunet_trainer.network.to(device)
+        with open("model.txt", "w") as f:
+            f.write(str(model))
+        loss_fn = nnunet_trainer.loss
+        mini_batch_size = nnunet_trainer.configuration_manager.batch_size
+        patch_size = nnunet_trainer.configuration_manager.patch_size
+        predictor.plans_manager = nnunet_trainer.plans_manager
+        predictor.configuration_manager = nnunet_trainer.configuration_manager
+        predictor.dataset_json = dataset_json
+        predictor.trainer_name = trainer
+        predictor.allowed_mirroring_axes = nnunet_trainer.inference_allowed_mirroring_axes
+        predictor.label_manager = nnunet_trainer.label_manager
     
     all_cases = create_lists_from_splitted_dataset_folder(
         join(nnUNet_raw, dataset_name, "imagesTr"),
@@ -228,33 +227,6 @@ def load_nnunet_model(train_dataset_id, plans, trainer, cfg, fold, device, pretr
     )
     
     return model, dataset_name, loss_fn, data_loader, num_train, mini_batch_size, patch_size
-
-def load_pretrained_model(train_dataset_id, plans, trainer, cfg, fold, device):
-    fold = fold if fold == "all" else int(fold)
-    dataset_name = get_dataset_name(train_dataset_id)
-    model_dir = join(
-        nnUNet_results,
-        dataset_name,
-        f"{trainer}__{plans}__{cfg}",
-    )
-    predictor = nnUNetPredictor(
-        tile_step_size=0.5,
-        use_gaussian=True,
-        use_mirroring=True,
-        perform_everything_on_device=True,
-        device=device,
-        verbose=False,
-        verbose_preprocessing=False,
-        allow_tqdm=True
-    )
-    # initializes the network architecture, loads the checkpoint
-    predictor.initialize_from_trained_model_folder(
-        model_dir,
-        use_folds=(fold,),
-        checkpoint_name="checkpoint_final.pth",
-    )
-
-    return predictor.network.to(device)
 
 
 def center_crop_or_pad(x: torch.Tensor, patch_size: tuple[int, int], pad_value: float = 0):
@@ -313,9 +285,7 @@ def score_config(args, cfg, device, metric_set):
         cfg,
         args.fold,
         device,
-        pretrained=args.use_pretrained,
         num_cases=num_cases,
-        chk=args.chk,
     )
     
     print("num_train", num_train)
@@ -481,8 +451,6 @@ def score_config(args, cfg, device, metric_set):
     print("\n")
     print(line)
     out_file = join(args.out_dir, f"{dataset_name}_metrics_b{batch_size}_seed{args.seed}.csv")
-    if args.use_pretrained:
-        out_file = out_file.replace("metrics_", "metrics_pretrained_")
     print("out_file", out_file)
     need_header = not os.path.exists(out_file) or os.path.getsize(out_file) == 0
     with open(out_file, "a", encoding="utf-8") as f:
