@@ -26,7 +26,7 @@ uv add torch torchvision --index=pytorch-cu126=https://download.pytorch.org/whl/
 Install nnU-Net v2:
 
 ```bash
-uv add nnunetv2
+uv add nnunetv2==2.7.0
 ```
 
 Set the standard nnU-Net environment variables:
@@ -143,4 +143,3 @@ If you use this work, please cite:
 	keywords = {Computer Science - Computer Vision and Pattern Recognition, Electrical Engineering and Systems Science - Image and Video Processing}
 }
 ```
-
