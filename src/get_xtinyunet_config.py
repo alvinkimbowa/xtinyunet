@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from copy import deepcopy
 import json
 from pathlib import Path
 
@@ -12,17 +13,15 @@ def add_xtiny_configs(plans):
     generated = []
     while max_features >= 1:
         name = f"2d_xtiny{max_features}"
+        architecture = deepcopy(base_config["architecture"])
         features_per_stage = [
             min(max_features, value)
             for value in base_features_per_stage
         ]
+        architecture["arch_kwargs"]["features_per_stage"] = features_per_stage
         plans["configurations"][name] = {
             "inherits_from": "2d",
-            "architecture": {
-                "arch_kwargs": {
-                    "features_per_stage": features_per_stage,
-                }
-            },
+            "architecture": architecture,
         }
         generated.append(name)
         max_features //= 2
