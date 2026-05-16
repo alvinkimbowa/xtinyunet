@@ -20,7 +20,7 @@ uv init
 Install PyTorch. Choose the wheel index that matches your CUDA setup. For CUDA 12.6:
 
 ```bash
-uv add torch torchvision --index pytorch-cu126=https://download.pytorch.org/whl/cu126
+uv add torch torchvision --index=pytorch-cu126=https://download.pytorch.org/whl/cu126
 ```
 
 Install nnU-Net v2:
@@ -143,3 +143,4 @@ If you use this work, please cite:
 	keywords = {Computer Science - Computer Vision and Pattern Recognition, Electrical Engineering and Systems Science - Image and Video Processing}
 }
 ```
+
