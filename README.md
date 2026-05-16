@@ -68,6 +68,8 @@ $nnUNet_preprocessed/DatasetXXX_MyDataset/
 
 ## 4. Get XTinyU-Net Config
 
+4.1 U-Net downscaling
+
 ```bash
 uv run python src/generate_candidate_configs.py --plans /path/to/nnUNetPlans.json
 ```
@@ -79,7 +81,7 @@ uv run python src/generate_candidate_configs.py \
   --plans "$nnUNet_preprocessed/Dataset300_MyDataset/nnUNetPlans.json"
 ```
 
-Run the input-output sensitivity scoring of the generated configs.
+4.2 Run the input-output sensitivity scoring of the generated configs.
 
 ```bash
 BATCH_SIZE="all"
@@ -90,10 +92,12 @@ uv run python src/score_net.py \
   --batch_size "${BATCH_SIZE}"
 ```
 
-Select the XTinyU-Net config:
+4.3 Estimate the collapse boundary and select the XTinyU-Net config:
 
 ```bash
-uv run python src/get_xtiny_config.py --scores /path/to/DatasetXXX_metrics_b${BATCH_SIZE}.csv
+uv run python src/get_xtiny_config.py \
+  --dataset_id DATASET_ID \
+  --batch_size "${BATCH_SIZE}"
 ```
 
 This returns the XTinyU-Net config.
@@ -165,3 +169,4 @@ If you use this work, please cite:
 	keywords = {Computer Science - Computer Vision and Pattern Recognition, Electrical Engineering and Systems Science - Image and Video Processing}
 }
 ```
+
