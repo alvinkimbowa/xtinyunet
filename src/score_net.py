@@ -189,8 +189,6 @@ def load_nnunet_model(train_dataset_id, plans, trainer, cfg, fold, device, num_c
         nnunet_trainer.enable_deep_supervision = False
         nnunet_trainer.initialize()
         model = nnunet_trainer.network.to(device)
-        with open("model.txt", "w") as f:
-            f.write(str(model))
         loss_fn = nnunet_trainer.loss
         mini_batch_size = nnunet_trainer.configuration_manager.batch_size
         patch_size = nnunet_trainer.configuration_manager.patch_size
