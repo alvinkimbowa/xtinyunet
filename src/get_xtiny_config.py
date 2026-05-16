@@ -142,7 +142,7 @@ def plot_difference_curve(configs, params, values, selected_config, out_path):
         s=130,
         color="red",
         zorder=5,
-        label=selected_config,
+        label=f"XTinyU-Net: {selected_config}",
     )
     ax.set_xscale("log")
     ax.set_xlabel("# Parameters")
@@ -175,14 +175,17 @@ def main():
 
     configs, params, values = get_metric_curve(rows, args.metric)
     selected_config = select_xtiny_config(configs, params, values)
+    curve_path = scores_path.with_suffix(".png")
     plot_difference_curve(
         configs,
         params,
         values,
         selected_config,
-        scores_path.with_suffix(".png"),
+        curve_path,
     )
-    print(selected_config)
+    print(f"Analyzed scores: {scores_path}")
+    print(f"Saved curve: {curve_path}")
+    print(f"XTinyU-Net: {selected_config}")
 
 
 if __name__ == "__main__":
