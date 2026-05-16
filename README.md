@@ -68,13 +68,18 @@ $nnUNet_preprocessed/DatasetXXX_MyDataset/
 
 ## 4. Get XTinyU-Net Config
 
-Run the XTinyU-Net configuration selector on the nnU-Net plans produced in step 3:
-
 ```bash
-uv run python get_xtinyunet_config.py --plans /path/to/nnUNetPlans.json
+uv run python src/get_xtinyunet_config.py --plans /path/to/nnUNetPlans.json
 ```
 
-The selector will return the chosen XTinyU-Net configuration name, for example: `2d_tiny8` or `2d_tiny16`.
+Example:
+
+```bash
+uv run python src/get_xtinyunet_config.py \
+  --plans "$nnUNet_preprocessed/Dataset300_MyDataset/nnUNetPlans.json"
+```
+
+This returns the XTinyU-Net config.
 
 ## 5. Train With nnU-Net
 
@@ -87,7 +92,7 @@ nnUNetv2_train DATASET_ID XTINY_CONFIG 0 -p nnUNetPlans -tr nnUNetTrainer --val_
 Example:
 
 ```bash
-nnUNetv2_train 300 2d_tiny8 0 -p nnUNetPlans -tr nnUNetTrainer --val_on_end
+nnUNetv2_train 300 2d_xtiny8 0 -p nnUNetPlans -tr nnUNetTrainer --val_on_end
 ```
 
 ## 6. Run Inference
@@ -112,7 +117,7 @@ nnUNetv2_predict \
   -i "$nnUNet_raw/Dataset300_MyDataset/imagesTs" \
   -o predictions/Dataset300_MyDataset_xtiny \
   -d 300 \
-  -c 2d_tiny8 \
+  -c 2d_xtiny8 \
   -f 0 \
   -p nnUNetPlans \
   -tr nnUNetTrainer
