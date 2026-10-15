@@ -86,9 +86,9 @@ def knee_index_tv_slopes(x, y):
     best_k_local = None
     best_score = -np.inf
 
-    for k_local in range(2, n - 2):
-        pre = d[:k_local]
-        post = d[k_local - 1:]
+    for k_local in range(1, n - 3):
+        pre = d[:k_local + 1]
+        post = d[k_local + 1:]
 
         if len(post) == 0 or len(pre) == 0:
             continue
@@ -103,7 +103,7 @@ def knee_index_tv_slopes(x, y):
     if best_k_local is None:
         return None
 
-    return int(base_idx[best_k_local - 1])
+    return int(base_idx[best_k_local])
 
 
 def select_xtiny_config(configs, params, values):
