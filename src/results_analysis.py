@@ -33,7 +33,7 @@ def parse_args():
     p.add_argument("--fold", type=int, default=0)
     p.add_argument("--nas_dir", type=str, default="results/nas_metrics")
     p.add_argument("--seed", type=int, default=369)
-    p.add_argument("--out", type=str, default="results/analysis/reduced_unet_normalized_dice_all_datasets.pdf")
+    p.add_argument("--out", type=str, default="results/analysis/cross_dataset_analysis/reduced_unet_normalized_dice_all_datasets.pdf")
     return p.parse_args()
 
 
