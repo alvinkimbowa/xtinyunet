@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
-from generate_candidate_configs import add_xtiny_configs
+from generate_candidate_configs import add_half_encoder_config, add_xtiny_configs
 
 
 def get_dataset_name(dataset_id, nnunet_raw):
@@ -128,6 +128,13 @@ def main():
     print(f"Analyzed scores: {scores_path}")
     print(f"Saved curve: {curve_path}")
     print(f"XTinyU-Net: {selected_config}")
+
+    with plans_path.open("r") as f:
+        plans = json.load(f)
+    half_encoder_config = add_half_encoder_config(plans, selected_config)
+    with plans_path.open("w") as f:
+        json.dump(plans, f, indent=4)
+    print(f"XTinyU-Net with half-width encoder: {half_encoder_config}")
 
 
 if __name__ == "__main__":
