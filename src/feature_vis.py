@@ -15,6 +15,11 @@ For each filter (output channel of a conv block, read at the raw conv output, be
   receptive field of the neuron at that position (the box holding 90% of the input gradient of that
   neuron) is cropped for display.
 
+With --objective channel the target is instead the mean of the filter's whole map: the optimized images
+are shown whole, use fixed shifts of 8 px with scale and rotation, and the diversity term covers the
+whole image; dataset examples are the images with the highest map mean, shown whole. Agreement is then
+the Gram-matrix similarity of the images (same texture), not their pixel correlation.
+
 Results accumulate in results/analysis/feature_vis/<dataset>.json; later runs optimize filters not
 yet present.
 """
@@ -199,7 +204,7 @@ def thumb(img, seg):
 @torch.no_grad()
 def scan(net, blocks, slices, stride, device):
     """Per block: each image's per-channel max of the raw conv output and its position, and per-channel std."""
-    stats = {name: dict(mx=[], pos=[], s=0.0, s2=0.0, n=0) for name, _ in blocks}
+    stats = {name: dict(mx=[], pos=[], mean=[], s=0.0, s2=0.0, n=0) for name, _ in blocks}
     for img, seg in slices:
         (x, _, _), = make_batches([(img, seg)], stride, 1, device)
         h0, w0 = seg.shape
@@ -219,12 +224,14 @@ def scan(net, blocks, slices, stride, device):
             st = stats[name]
             st["mx"].append(v.cpu())
             st["pos"].append(torch.stack([k // W, k % W], 1).cpu())
+            st["mean"].append(flat.mean(1).cpu())
             st["s"] += flat.sum(1).double().cpu()
             st["s2"] += (flat.double() ** 2).sum(1).cpu()
             st["n"] += flat.shape[1]
     for st in stats.values():
         st["mx"] = torch.stack(st["mx"])
         st["pos"] = torch.stack(st["pos"])
+        st["mean"] = torch.stack(st["mean"])
         mean = st["s"] / st["n"]
         st["std"] = (st["s2"] / st["n"] - mean ** 2).clamp(min=1e-12).sqrt().float()
     return stats
@@ -252,6 +259,64 @@ def dataset_examples(net, blocks, labels, slices, stride, device, stats, keep=No
             out[f"{labels[name]}·{c}"] = dict(top=top, max=round(float(st["mx"][:, c].max()), 4),
                                                std=round(float(st["std"][c]), 4))
     return out
+
+
+def channel_examples(blocks, labels, stats, keep=None, k=4):
+    """Per filter, the k images with the highest mean of the filter's map."""
+    out = {}
+    for name, _ in blocks:
+        st = stats[name]
+        for c in range(st["mean"].shape[1]):
+            if keep is not None and c not in keep[name]:
+                continue
+            order = torch.argsort(st["mean"][:, c], descending=True)[:k].tolist()
+            out[f"{labels[name]}·{c}"] = dict(top=[dict(img=n, act=round(float(st["mean"][n, c]), 4)) for n in order],
+                                               max=round(float(st["mean"][:, c].max()), 4),
+                                               std=round(float(st["std"][c]), 4))
+    return out
+
+
+def full_png(img):
+    """Whole img[C,H,W] downsampled to at most THUMB_PX."""
+    c = disp(img).cpu()
+    h, w = c.shape[:2]
+    im = Image.fromarray(np.ascontiguousarray(c.numpy()), "RGB" if c.dim() == 3 else "L")
+    s = min(1.0, THUMB_PX / max(h, w))
+    if s < 1:
+        im = im.resize((max(1, round(w * s)), max(1, round(h * s))), Image.LANCZOS)
+    return encode(im)
+
+
+def pair_mean(sim):
+    b = sim.shape[0]
+    return (sim.sum() - sim.diagonal().sum()) / (b * (b - 1))
+
+
+def optimize_channel(net, conv, c, shape, std, rng, mix, device, b, steps, lam, lr, seed, jit=8):
+    torch.manual_seed(seed)
+    random.seed(seed)
+    ch, H, W = shape
+    full = (0, 0, H, W)
+    param = FourierImage(b, ch, H, W, rng[0], rng[1], device, mix)
+    opt = torch.optim.Adam(param.parameters(), lr=lr)
+    for _ in range(steps):
+        opt.zero_grad()
+        x = param()
+        out, _ = run_to(net, conv, transform(x, jit, True))
+        loss = -(out[:, c].mean((1, 2)) / std).mean()
+        if lam > 0 and b > 1:
+            G = patch_gram(x, full)
+            loss = loss + lam * pair_mean(G @ G.T)
+        loss.backward()
+        opt.step()
+    with torch.no_grad():
+        x = param()
+        out, _ = run_to(net, conv, x)
+        acts = out[:, c].mean((1, 2)).tolist()
+        G = patch_gram(x, full)
+        agree = float(pair_mean(G @ G.T)) if b > 1 else 1.0
+    return dict(opt=[dict(png=full_png(x[k]), act=round(a, 4)) for k, a in enumerate(acts)],
+                agree=round(agree, 3), jitter=jit, affine=True, steps=steps, lam=lam, lr=lr)
 
 
 class FourierImage(torch.nn.Module):
@@ -358,7 +423,7 @@ def optimize(net, conv, c, shape, rf, std, rng, mix, device, b, steps, lam, lr, 
     cor = v @ v.T
     agree = float((cor.sum() - cor.diagonal().sum()) / (b * (b - 1))) if b > 1 else 1.0
     return dict(opt=[dict(png=p, act=round(a, 4), box=list(bx)) for p, a, bx in zip(imgs, acts, boxes)],
-                agree=round(agree, 3), jitter=jit, affine=affine, rf_box=list(rf_box), steps=steps, lam=lam)
+                agree=round(agree, 3), jitter=jit, affine=affine, rf_box=list(rf_box), steps=steps, lam=lam, lr=lr)
 
 
 def main():
@@ -376,6 +441,8 @@ def main():
     p.add_argument("--steps", type=int, default=2560)
     p.add_argument("--lr", type=float, default=0.05)
     p.add_argument("--lam", type=float, default=1.0, help="weight of the diversity term")
+    p.add_argument("--objective", choices=["neuron", "channel"], default="neuron",
+                   help="neuron: the centre neuron of the filter's map; channel: the mean of the whole map")
     p.add_argument("--out", default=None)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     a = p.parse_args()
@@ -389,7 +456,8 @@ def main():
     rfs = dict(zip([n for n, _ in blocks], receptive_fields(net)))
     stride = total_stride(cm)
     patch = list(cm.patch_size)
-    out_path = Path(a.out) if a.out else OUT_ROOT / f"{a.dataset}.json"
+    chan = a.objective == "channel"
+    out_path = Path(a.out) if a.out else (OUT_ROOT.with_name("feature_vis_channel") if chan else OUT_ROOT) / f"{a.dataset}.json"
     res = json.load(open(out_path)) if out_path.exists() else None
 
     ch_names = list(json.load(open(Path("data/nnUNet_preprocessed") / a.dataset / "dataset.json"))["channel_names"].values())
@@ -403,7 +471,8 @@ def main():
         if a.per_block > 0:
             r = random.Random(a.seed)
             keep = {n: set(r.sample(range(blk.conv.out_channels), min(a.per_block, blk.conv.out_channels))) for n, blk in blocks}
-        ex = dataset_examples(net, blocks, labels, slices, stride, device, stats, keep)
+        ex = (channel_examples(blocks, labels, stats, keep) if chan
+              else dataset_examples(net, blocks, labels, slices, stride, device, stats, keep))
         px = np.concatenate([s[0].reshape(s[0].shape[0], -1) for s in slices], 1)
         px = px[:, np.random.default_rng(0).choice(px.shape[1], min(px.shape[1], 2_000_000), replace=False)]
         rng = [np.quantile(px, 0.005, axis=1).tolist(), np.quantile(px, 0.995, axis=1).tolist()]
@@ -413,7 +482,7 @@ def main():
         for v in ex.values():
             for t in v["top"]:
                 t["img"] = remap[t["img"]]
-        res = dict(dataset=SHORT.get(a.dataset, a.dataset), cfg=cfg, patch=patch, range=rng, mix=mix,
+        res = dict(dataset=SHORT.get(a.dataset, a.dataset), cfg=cfg, objective=a.objective, patch=patch, range=rng, mix=mix,
                    channels=ch_names, display_channel=DISPLAY["channel"],
                    rf={labels[n]: r for n, r in rfs.items()},
                    images=[dict(h=int(slices[n][1].shape[0]), w=int(slices[n][1].shape[1]),
@@ -436,11 +505,16 @@ def main():
         lab, c = key.split("·")
         name, blk = by_label[lab]
         f = res["filters"][key]
-        r = optimize(net, blk.conv, int(c), (ch, *patch), rfs[name], max(f["std"], 1e-6), res["range"], res.get("mix"), device,
-                     a.batch, a.steps, a.lam, a.lr, a.seed * 1000 + zlib.crc32(key.encode()) % 1000)
+        seed = a.seed * 1000 + zlib.crc32(key.encode()) % 1000
+        if chan:
+            r = optimize_channel(net, blk.conv, int(c), (ch, *patch), max(f["std"], 1e-6), res["range"], res.get("mix"), device,
+                                 a.batch, a.steps, a.lam, a.lr, seed)
+        else:
+            r = optimize(net, blk.conv, int(c), (ch, *patch), rfs[name], max(f["std"], 1e-6), res["range"], res.get("mix"), device,
+                         a.batch, a.steps, a.lam, a.lr, seed)
         f.update(r)
         json.dump(res, open(out_path, "w"))
-        print(f"[{i + 1}/{len(todo)}] {key}: act/real-max {[round(o['act'] / max(f['max'], 1e-6), 2) for o in r['opt']]}"
+        print(f"[{i + 1}/{len(todo)}] {key}: act {[o['act'] for o in r['opt']]}"
               f" agree {r['agree']} ({time.time() - t1:.0f}s)", flush=True)
     print(f"done in {time.time() - t0:.0f}s -> {out_path} ({out_path.stat().st_size / 1e6:.1f} MB)")
 
